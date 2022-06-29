@@ -1,0 +1,6 @@
+{
+  "slither.solcPath": "",
+  "slither.hiddenDetectors": [],
+  "solidity.defaultCompiler": "localNodeModule",
+  "solidity.compileUsingRemoteVersion": "v0.8.7-fixed"
+}
