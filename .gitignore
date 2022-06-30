@@ -111,3 +111,6 @@ cache/
 
 # Coverage file
 coverage.json
+
+# slither results
+slither-results.json
