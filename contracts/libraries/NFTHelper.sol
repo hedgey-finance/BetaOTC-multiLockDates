@@ -33,7 +33,7 @@ library NFTHelper {
     /// @dev check to make sure that _holder is received by the futures contract equals the total amount we have delivered
     /// @dev this prevents functionality with deflationary or tax tokens that have not whitelisted these address
     uint256 postBalance = IERC20(_token).balanceOf(futureContract);
-    assert(postBalance - currentBalance == _amount);
+    require(postBalance - currentBalance == _amount, 'NHL02);
   }
 
   /// @notice function to get the balances for a given wallet
