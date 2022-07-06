@@ -18,7 +18,7 @@ contract BetaOTC is ReentrancyGuard {
   uint256 public d = 0;
   address public futuresContract;
 
-  /// Creates a BetaOTC instance
+  /// @notice Creates a BetaOTC instance
   /// @param _weth The address for the weth contract, weth is used to wrap and unwrap ETH sending to and from the smart contract
   /// @param _fc The address for the futures contract, used to generate the future NFT
   constructor(
@@ -41,9 +41,7 @@ contract BetaOTC is ReentrancyGuard {
   /// @param price The Price is the per token cost which buyers pay to the seller, denominated in the payment currency. This is not the total price of the deal
   /// the total price is calculated by the remainingAmount * price (then adjusting for the decimals of the payment currency)
   /// @param maturity This is the unix time defining the period in which the deal is valid. After the maturity no purchases can be made
-  /// @param _unlockDates is used if you are requiring that tokens purchased by buyers are locked. If this is set to 0 or anything less than current block time
-  /// any tokens purchased will not be locked but immediately delivered to the buyers. Otherwise the unlockDate will lock the tokens in the associated
-  /// futureContract and mint the buyer an NFT - which will hold the tokens in escrow until the unlockDate has passed - whereupon the owner of the NFT can redeem the tokens
+  /// @param _unlockDates these are the dates in which tokens will be locked, multiple dates can be passed in for a series of vesting cliffs
   /// @param _nfts is a special option to make this deal require that the buyers hold a specific other NFT to participate in the buy
   struct Deal {
     address seller;
@@ -104,9 +102,7 @@ contract BetaOTC is ReentrancyGuard {
   /// @param _price is the price per token which the seller will get paid, denominated in the payment currency
   /// if this is a token SWAP, then the _price needs to be set as the ratio of the tokens being swapped - ie 10 for 10 paymentCurrency tokens to 1 token
   /// @param _maturity is how long you would like to allow buyers to purchase tokens from this deal, in unix time. this needs to be beyond current block time
-  /// @param _unlockDates is used if you are requiring that tokens purchased by buyers are locked. If this is set to 0 or anything less than current block time
-  /// any tokens purchased will not be locked but immediately delivered to the buyers. Otherwise the unlockDate will lock the tokens in the associated
-  /// futureContract and mint the buyer an NFT - which will hold the tokens in escrow until the unlockDate has passed - whereupon the owner of the NFT can redeem the tokens
+  /// @param _unlockDates is the dates in which the tokens will be cliff vested
   /// @param _nfts is a special option to make this deal require that the buyers hold a specific other NFT to participate in the buy
   function createNFTGatedDeal(
     address _token,
