@@ -1,10 +1,11 @@
 import "@nomiclabs/hardhat-waffle";
 import "solidity-coverage";
 import "hardhat-gas-reporter";
+import "@nomiclabs/hardhat-etherscan";
 
 export default {
   gasReporter: {
-    currency: 'CHF',
+    currency: 'USD',
     gasPrice: 21
   },
   solidity: {
@@ -12,8 +13,16 @@ export default {
     settings: {
       optimizer: {
         enabled: true,
-        runs: 10,
+        runs: 200,
       },
     }
-  }, 
+  },
+  networks: {
+    rinkeby: {
+      url: process.env.RINKEBY_URL,
+    },
+  },
+  etherscan: {
+    apiKey: process.env.RINKEBY_API,
+  }
 };
