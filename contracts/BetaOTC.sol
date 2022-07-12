@@ -82,7 +82,7 @@ contract BetaOTC is ReentrancyGuard {
   event TokensBought(uint256 indexed _dealId, uint256 _amount, uint256 _remainingAmount);
 
   /// Event emitted when the deal is closed
-  /// @param _d The deal index
+  /// @param _dealId The deal index
   event DealClosed(uint256 indexed _dealId);
   
   /// Event emitted when a future NFT is created
