@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.7;
 
-import '@openzeppelin/contracts/security/ReentrancyGuard.sol';
 import './interfaces/Decimals.sol';
 import './libraries/TransferHelper.sol';
 import './libraries/NFTHelper.sol';
 import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
+import '@openzeppelin/contracts/security/ReentrancyGuard.sol';
 
 /**
  * @title BetaOTC
@@ -15,7 +15,7 @@ import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 contract BetaOTC is ReentrancyGuard {
   using SafeERC20 for IERC20;
   address payable public weth;
-  uint256 public d = 0;
+  uint256 public dealId;
   address public futuresContract;
 
   /// @notice Creates a BetaOTC instance
@@ -63,8 +63,8 @@ contract BetaOTC is ReentrancyGuard {
 
   /// Event emitted when a deal is created
   event NewNFTGatedDeal(
-    uint256 _d,
-    address _seller,
+    uint256 indexed _dealId,
+    address indexed _seller,
     address _token,
     address _paymentCurrency,
     uint256 _remainingAmount,
@@ -76,21 +76,21 @@ contract BetaOTC is ReentrancyGuard {
   );
 
   /// Event emitted when tokens are bought
-  /// @param _d The deal index
+  /// @param _dealId The deal index
   /// @param _amount The amount of tokens bought
   /// @param _remainingAmount The remaining number of tokens in the deal
-  event TokensBought(uint256 _d, uint256 _amount, uint256 _remainingAmount);
+  event TokensBought(uint256 indexed _dealId, uint256 _amount, uint256 _remainingAmount);
 
   /// Event emitted when the deal is closed
   /// @param _d The deal index
-  event DealClosed(uint256 _d);
+  event DealClosed(uint256 indexed _dealId);
   
   /// Event emitted when a future NFT is created
   /// @param _owner The address that bought tokens from the deal and owns the future NFT
   /// @param _token The address of the token contract
   /// @param _amount The amount of tokens locked
   /// @param _unlockDate The date when the future NFT is unlocked
-  event FutureCreated(address _owner, address _token, uint256 _amount, uint256 _unlockDate);
+  event FutureCreated(address indexed _owner, address _token, uint256 _amount, uint256 _unlockDate);
   
   /// This function is what the seller uses to create a new OTC offering, Once this function has been completed 
   /// buyers can purchase tokens from the seller based on the price and parameters set
@@ -117,7 +117,7 @@ contract BetaOTC is ReentrancyGuard {
     require(_maturity > block.timestamp, 'OTC01');
     require(_amount >= _min, 'OTC02');
     require((_min * _price) / (10**Decimals(_token).decimals()) > 0, 'OTC03');
-    deals[d++] = Deal(
+    deals[dealId++] = Deal(
       msg.sender,
       _token,
       _paymentCurrency,
@@ -130,7 +130,7 @@ contract BetaOTC is ReentrancyGuard {
     );
     
     emit NewNFTGatedDeal(
-      d - 1,
+      dealId - 1,
       msg.sender,
       _token,
       _paymentCurrency,
@@ -147,26 +147,25 @@ contract BetaOTC is ReentrancyGuard {
 
   /// @notice This function lets a seller cancel their existing deal anytime they if they want to, including before the maturity date, 
   /// all that is required is that the deal has not been closed, and that there is still a reamining balance
-  /// @param _d is the dealID that is mapped to the Struct Deal
-  function close(uint256 _d) external nonReentrant {
-    Deal memory deal = deals[_d];
+  /// @param _dealId is the dealID that is mapped to the Struct Deal
+  function close(uint256 _dealId) external nonReentrant {
+    Deal memory deal = deals[_dealId];
     require(msg.sender == deal.seller, 'OTC04');
     require(deal.remainingAmount > 0, 'OTC05');
-    delete deals[_d];
-    emit DealClosed(_d);
+    delete deals[_dealId];
+    emit DealClosed(_dealId);
     TransferHelper.withdrawPayment(weth, deal.token, payable(msg.sender), deal.remainingAmount);
   }
 
   /// @notice Checks if the address owns one of the NFTs configured for the deal
-  /// @param _d The deal index
+  /// @param _dealId The deal index
   /// @param buyer The buyer address
-  function isNFTOwner(uint256 _d, address buyer) public view returns (bool canBuy) {
-    Deal memory deal = deals[_d];
-    canBuy = false;
+  function isNFTOwner(uint256 _dealId, address buyer) public view returns (bool canBuy) {
+    Deal memory deal = deals[_dealId];
     if (deal.nfts.length == 0) {
       canBuy = true;
     } else {
-      for (uint256 i = 0; i < deal.nfts.length; i++) {
+      for (uint256 i; i < deal.nfts.length; i++) {
         if (IERC721(deal.nfts[i]).balanceOf(buyer) > 0) {
           canBuy = true;
         }
@@ -175,15 +174,14 @@ contract BetaOTC is ReentrancyGuard {
   }
 
   /// This function is what buyers use to make purchases from the sellers
-  /// @param _d is the index of the deal that a buyer wants to participate in and make a purchase
+  /// @param _dealId is the index of the deal that a buyer wants to participate in and make a purchase
   /// @param _amount is the amount of tokens the buyer is purchasing, which must be at least the minimumPurchase and at 
   /// most the remainingAmount for this deal (or the remainingAmount if that is less than the minimum)
   /// @dev this function can also be used to execute a token SWAP function, where the swap is executed through this function
-  function buy(uint256 _d, uint256 _amount) external payable nonReentrant {
-    Deal memory deal = deals[_d];
-    require(msg.sender != deal.seller, 'OTC06');
+  function buy(uint256 _dealId, uint256 _amount) external payable nonReentrant {
+    Deal memory deal = deals[_dealId];
     require(deal.maturity >= block.timestamp, 'OTC07');
-    require(isNFTOwner(_d, msg.sender), 'OTC08');
+    require(isNFTOwner(_dealId, msg.sender), 'OTC08');
     require(
       (_amount >= deal.minimumPurchase || _amount == deal.remainingAmount) && deal.remainingAmount >= _amount,
       'OTC09'
@@ -192,10 +190,10 @@ contract BetaOTC is ReentrancyGuard {
     uint256 purchase = (_amount * deal.price) / (10**decimals);
     TransferHelper.transferPayment(weth, deal.paymentCurrency, msg.sender, payable(deal.seller), purchase);
     deal.remainingAmount -= _amount;
-    emit TokensBought(_d, _amount, deal.remainingAmount);
+    emit TokensBought(_dealId, _amount, deal.remainingAmount);
     if (deal.unlockDates.length > 0) {
       uint256 proRataLockAmount = _amount / deal.unlockDates.length;
-      for (uint256 i = 0; i < deal.unlockDates.length; i++) {
+      for (uint256 i; i < deal.unlockDates.length; i++) {
         NFTHelper.lockTokens(futuresContract, msg.sender, deal.token, proRataLockAmount, deal.unlockDates[i]);
         emit FutureCreated(msg.sender, deal.token, proRataLockAmount, deal.unlockDates[i]);
       }
@@ -203,9 +201,9 @@ contract BetaOTC is ReentrancyGuard {
       TransferHelper.withdrawPayment(weth, deal.token, payable(msg.sender), _amount);
     }
     if (deal.remainingAmount == 0) {
-      delete deals[_d];
+      delete deals[_dealId];
     } else {
-      deals[_d].remainingAmount = deal.remainingAmount;
+      deals[_dealId].remainingAmount = deal.remainingAmount;
     }
   }
 }
