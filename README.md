@@ -19,7 +19,7 @@ npx hardhat test
 ```
 
 ## Testnet (Rinkeby) Deployments  
-BetaOTC contract deployed at `0xB74122E79DbDb92a39fd573071DED6D8b04A616D`  
+BetaOTC contract deployed at `0x9037130073CcF59178253958C7cA5848dca1e74b`  
 WhiteListToken (WLT) contract deployed at `0x0fa8408288C9e0C98143323c696fC7b6D9b4d04C`  
 
 Other useful contracts for testing: 
