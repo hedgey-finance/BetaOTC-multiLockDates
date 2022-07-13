@@ -18,6 +18,9 @@ npx hardhat compile
 npx hardhat test
 ```
 
+## Ethereum Mainnet Deployment
+BetaOTC contract deployed: `0xCd33C2b1949De672aFDc998F78d1a553A7B56C0b`  
+
 ## Testnet (Rinkeby) Deployments  
 BetaOTC contract deployed at `0x9037130073CcF59178253958C7cA5848dca1e74b`  
 WhiteListToken (WLT) contract deployed at `0x0fa8408288C9e0C98143323c696fC7b6D9b4d04C`  
