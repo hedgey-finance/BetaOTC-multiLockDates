@@ -12,7 +12,7 @@ import '@openzeppelin/contracts/security/ReentrancyGuard.sol';
  * @notice BetaOTC is an over the counter peer to peer trading contract
  * @notice This contract allows for a seller to generate a unique public over the counter deal
  */
-contract BetaOTC is ReentrancyGuard {
+contract MultiLockOTC is ReentrancyGuard {
   using SafeERC20 for IERC20;
   address payable public weth;
   uint256 public dealId;
