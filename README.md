@@ -19,7 +19,8 @@ npx hardhat test
 ```
 
 ## Ethereum Mainnet Deployment
-OTC multi-lock contract deployed: `0xCd33C2b1949De672aFDc998F78d1a553A7B56C0b`  
+OTC multi-lock contract deployed: `0xf9e896b068cf9d71F3e7e4A710E72D6bA4531212`  
+linked to the NFT Contract deployed at: `0x2AA5d15Eb36E5960d056e8FeA6E7BB3e2a06A351`  
 
 ## Testnet (Rinkeby) Deployments  
 OTC contract deployed at `0x9037130073CcF59178253958C7cA5848dca1e74b`  
