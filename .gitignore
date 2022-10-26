@@ -114,3 +114,6 @@ coverage.json
 
 # slither results
 slither-results.json
+
+#internal scripts
+scripts
