@@ -22,22 +22,6 @@ contract SaleMultiLock is ReentrancyGuard {
   /// @dev saleId is a basic counter, used for indexing all of the sales - and sales are mapped to each index saleId
   uint256 public saleId = 0;
 
-  /// @dev events for each function
-  event NewSale(
-    uint256 id,
-    address seller,
-    address token,
-    address paymentCurrency,
-    uint256 amount,
-    uint256 cost,
-    uint256[] unlockDates,
-    address buyer
-  );
-  event TokensBought(uint256 id, uint256 amount);
-  event SaleClosed(uint256 id);
-  event FutureCreated(address _owner, address _token, uint256 _amount, uint256 _unlockDate);
-
-
   /**
    * @notice Sale is the struct that defines a single sale, created by a seller
    * @dev  Sale struct contains the following parameter definitions:
@@ -62,6 +46,21 @@ contract SaleMultiLock is ReentrancyGuard {
 
   /// @dev the Sales are all mapped via the indexer saleId to sales mapping
   mapping(uint256 => Sale) public sales;
+
+  /// @dev events for each function
+  event NewSale(
+    uint256 id,
+    address seller,
+    address token,
+    address paymentCurrency,
+    uint256 amount,
+    uint256 cost,
+    uint256[] unlockDates,
+    address buyer
+  );
+  event TokensBought(uint256 id, uint256 amount);
+  event SaleClosed(uint256 id);
+  event FutureCreated(address _owner, address _token, uint256 _amount, uint256 _unlockDate);
 
   constructor(address payable _weth, address fc) {
     weth = _weth;
@@ -159,5 +158,4 @@ contract SaleMultiLock is ReentrancyGuard {
       TransferHelper.withdrawPayment(weth, sale.token, payable(beneficiary), sale.amount);
     }
   }
-
 }
