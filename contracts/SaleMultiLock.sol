@@ -18,12 +18,24 @@ contract SaleMultiLock is ReentrancyGuard {
   /// @dev we set the WETH address so that we can wrap and unwrap ETH sending to and from the smart contract
   /// @dev the smart contract always stores WETH, but receives and delivers ETH to and from users
   address payable public weth;
+  address public futureContract;
   /// @dev saleId is a basic counter, used for indexing all of the sales - and sales are mapped to each index saleId
   uint256 public saleId = 0;
 
-  constructor(address payable _weth) {
-    weth = _weth;
-  }
+  /// @dev events for each function
+  event NewSale(
+    uint256 id,
+    address seller,
+    address token,
+    address paymentCurrency,
+    uint256 amount,
+    uint256 cost,
+    uint256[] unlockDates,
+    address buyer
+  );
+  event TokensBought(uint256 id, uint256 amount);
+  event SaleClosed(uint256 id);
+  event FutureCreated(address _owner, address _token, uint256 _amount, uint256 _unlockDate);
 
   /**
    * @notice Sale is the struct that defines a single sale, created by a seller
@@ -44,12 +56,16 @@ contract SaleMultiLock is ReentrancyGuard {
     uint256 amount;
     uint256 cost;
     uint256[] unlockDates;
-    address nftLocker;
     address buyer;
   }
 
   /// @dev the Sales are all mapped via the indexer saleId to sales mapping
   mapping(uint256 => Sale) public sales;
+
+  constructor(address payable _weth, address fc) {
+    weth = _weth;
+    futureContract = fc;
+  }
 
   receive() external payable {}
 
@@ -65,9 +81,8 @@ contract SaleMultiLock is ReentrancyGuard {
    * @param amount is the amount of tokens that you as the seller want to sell
    * @param cost is the total cost to buy the total amount
    * @param unlockDates is the set of vesting dates the tokens will unlock - the amount is split evenly between each date
-   * @param nftLocker is the address of the Hedgeys NFT contract that will be used for locking the tokens if they are to be locked
    * @param buyer is a special option to make this a private sale - where only a specific buyer's address can participate and make the purchase. If this is set to the
-   * ... Zero address - then it is publicly available and anyone can purchase tokens from this sale
+   * ... Zero address - then it is publicly available and anyone can purchase ALL tokens from this sale
    */
   function create(
     address token,
@@ -75,15 +90,13 @@ contract SaleMultiLock is ReentrancyGuard {
     uint256 amount,
     uint256 cost,
     uint256[] memory unlockDates,
-    address nftLocker,
     address payable buyer
   ) external payable nonReentrant {
     require(amount > 0, 'amount cannot be 0');
     require(token != address(0) && paymentCurrency != address(0), 'token zero address');
-    if (unlockDates.length > 0) require(nftLocker != address(0));
     TransferHelper.transferPayment(weth, token, payable(msg.sender), payable(address(this)), amount);
-    emit NewSale(saleId, msg.sender, token, paymentCurrency, amount, cost, unlockDates, nftLocker, buyer);
-    sales[saleId++] = Sale(msg.sender, token, paymentCurrency, amount, cost, unlockDates, nftLocker, buyer);
+    emit NewSale(saleId, msg.sender, token, paymentCurrency, amount, cost, unlockDates, buyer);
+    sales[saleId++] = Sale(msg.sender, token, paymentCurrency, amount, cost, unlockDates, buyer);
   }
 
   /**
@@ -113,52 +126,25 @@ contract SaleMultiLock is ReentrancyGuard {
     delete sales[_saleId];
     if (sale.unlockDates.length > 0) {
       uint256 proRataLockAmount = sale.amount / sale.unlockDates.length;
-      if (proRataLockAmount % sale.amount != 0) {
-        uint256 amountCheck;
-        for (uint256 i; i < sale.unlockDates.length - 1; i++) {
-          NFTHelper.lockTokens(sale.nftLocker, beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
-          emit FutureCreated(beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
-          amountCheck += proRataLockAmount;
-        }
-        amountCheck += proRataLockAmount + 1;
-        require(amountCheck == sale.amount, 'amount total mismatch');
-        NFTHelper.lockTokens(
-          sale.nftLocker,
-          beneficiary,
-          sale.token,
-          proRataLockAmount + 1,
-          sale.unlockDates[sale.unlockDates.length - 1]
-        );
-        emit FutureCreated(
-          beneficiary,
-          sale.token,
-          proRataLockAmount + 1,
-          sale.unlockDates[sale.unlockDates.length - 1]
-        );
-      } else {
-        for (uint256 i; i < sale.unlockDates.length; i++) {
-          NFTHelper.lockTokens(sale.nftLocker, beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
-          emit FutureCreated(beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
-        }
+      uint256 remainder = proRataLockAmount % sale.amount;
+      uint256 amountCheck;
+      for (uint256 i; i < sale.unlockDates.length - 1; i++) {
+        NFTHelper.lockTokens(futureContract, beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
+        emit FutureCreated(beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
+        amountCheck += proRataLockAmount;
       }
+      amountCheck += proRataLockAmount + remainder;
+      require(amountCheck == sale.amount, 'amount total mismatch');
+      NFTHelper.lockTokens(
+        futureContract,
+        beneficiary,
+        sale.token,
+        proRataLockAmount + remainder,
+        sale.unlockDates[sale.unlockDates.length - 1]
+      );
+      emit FutureCreated(beneficiary, sale.token, proRataLockAmount + 1, sale.unlockDates[sale.unlockDates.length - 1]);
     } else {
       TransferHelper.withdrawPayment(weth, sale.token, payable(beneficiary), sale.amount);
     }
   }
-
-  /// @dev events for each function
-  event NewSale(
-    uint256 id,
-    address seller,
-    address token,
-    address paymentCurrency,
-    uint256 amount,
-    uint256 cost,
-    uint256[] unlockDates,
-    address nftLocker,
-    address buyer
-  );
-  event TokensBought(uint256 id, uint256 amount);
-  event SaleClosed(uint256 id);
-  event FutureCreated(address _owner, address _token, uint256 _amount, uint256 _unlockDate);
 }
