@@ -37,6 +37,7 @@ contract SaleMultiLock is ReentrancyGuard {
   event SaleClosed(uint256 id);
   event FutureCreated(address _owner, address _token, uint256 _amount, uint256 _unlockDate);
 
+
   /**
    * @notice Sale is the struct that defines a single sale, created by a seller
    * @dev  Sale struct contains the following parameter definitions:
@@ -82,7 +83,7 @@ contract SaleMultiLock is ReentrancyGuard {
    * @param cost is the total cost to buy the total amount
    * @param unlockDates is the set of vesting dates the tokens will unlock - the amount is split evenly between each date
    * @param buyer is a special option to make this a private sale - where only a specific buyer's address can participate and make the purchase. If this is set to the
-   * ... Zero address - then it is publicly available and anyone can purchase ALL tokens from this sale
+   * ... Zero address - then it is publicly available and anyone can purchase tokens from this sale
    */
   function create(
     address token,
@@ -126,25 +127,37 @@ contract SaleMultiLock is ReentrancyGuard {
     delete sales[_saleId];
     if (sale.unlockDates.length > 0) {
       uint256 proRataLockAmount = sale.amount / sale.unlockDates.length;
-      uint256 remainder = proRataLockAmount % sale.amount;
-      uint256 amountCheck;
-      for (uint256 i; i < sale.unlockDates.length - 1; i++) {
-        NFTHelper.lockTokens(futureContract, beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
-        emit FutureCreated(beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
-        amountCheck += proRataLockAmount;
+      if (proRataLockAmount % sale.amount != 0) {
+        uint256 amountCheck;
+        for (uint256 i; i < sale.unlockDates.length - 1; i++) {
+          NFTHelper.lockTokens(futureContract, beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
+          emit FutureCreated(beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
+          amountCheck += proRataLockAmount;
+        }
+        amountCheck += proRataLockAmount + 1;
+        require(amountCheck == sale.amount, 'amount total mismatch');
+        NFTHelper.lockTokens(
+          futureContract,
+          beneficiary,
+          sale.token,
+          proRataLockAmount + 1,
+          sale.unlockDates[sale.unlockDates.length - 1]
+        );
+        emit FutureCreated(
+          beneficiary,
+          sale.token,
+          proRataLockAmount + 1,
+          sale.unlockDates[sale.unlockDates.length - 1]
+        );
+      } else {
+        for (uint256 i; i < sale.unlockDates.length; i++) {
+          NFTHelper.lockTokens(futureContract, beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
+          emit FutureCreated(beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
+        }
       }
-      amountCheck += proRataLockAmount + remainder;
-      require(amountCheck == sale.amount, 'amount total mismatch');
-      NFTHelper.lockTokens(
-        futureContract,
-        beneficiary,
-        sale.token,
-        proRataLockAmount + remainder,
-        sale.unlockDates[sale.unlockDates.length - 1]
-      );
-      emit FutureCreated(beneficiary, sale.token, proRataLockAmount + 1, sale.unlockDates[sale.unlockDates.length - 1]);
     } else {
       TransferHelper.withdrawPayment(weth, sale.token, payable(beneficiary), sale.amount);
     }
   }
+
 }
