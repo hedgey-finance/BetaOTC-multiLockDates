@@ -126,34 +126,23 @@ contract SaleMultiLock is ReentrancyGuard {
     delete sales[_saleId];
     if (sale.unlockDates.length > 0) {
       uint256 proRataLockAmount = sale.amount / sale.unlockDates.length;
-      if (proRataLockAmount % sale.amount != 0) {
-        uint256 amountCheck;
-        for (uint256 i; i < sale.unlockDates.length - 1; i++) {
-          NFTHelper.lockTokens(futureContract, beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
-          emit FutureCreated(beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
-          amountCheck += proRataLockAmount;
-        }
-        amountCheck += proRataLockAmount + 1;
-        require(amountCheck == sale.amount, 'amount total mismatch');
-        NFTHelper.lockTokens(
-          futureContract,
-          beneficiary,
-          sale.token,
-          proRataLockAmount + 1,
-          sale.unlockDates[sale.unlockDates.length - 1]
-        );
-        emit FutureCreated(
-          beneficiary,
-          sale.token,
-          proRataLockAmount + 1,
-          sale.unlockDates[sale.unlockDates.length - 1]
-        );
-      } else {
-        for (uint256 i; i < sale.unlockDates.length; i++) {
-          NFTHelper.lockTokens(futureContract, beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
-          emit FutureCreated(beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
-        }
+      uint256 remainder = sale.amount % proRataLockAmount;
+      uint256 amountCheck;
+      for (uint256 i; i < sale.unlockDates.length - 1; i++) {
+        NFTHelper.lockTokens(futureContract, beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
+        emit FutureCreated(beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
+        amountCheck += proRataLockAmount;
       }
+      amountCheck += proRataLockAmount + remainder;
+      require(amountCheck == sale.amount, 'amount total mismatch');
+      NFTHelper.lockTokens(
+        futureContract,
+        beneficiary,
+        sale.token,
+        proRataLockAmount + 1,
+        sale.unlockDates[sale.unlockDates.length - 1]
+      );
+      emit FutureCreated(beneficiary, sale.token, proRataLockAmount + 1, sale.unlockDates[sale.unlockDates.length - 1]);
     } else {
       TransferHelper.withdrawPayment(weth, sale.token, payable(beneficiary), sale.amount);
     }
