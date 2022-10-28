@@ -3,7 +3,7 @@ pragma solidity 0.8.7;
 
 import '@openzeppelin/contracts/security/ReentrancyGuard.sol';
 import './libraries/TransferHelper.sol';
-import './libraries/NFTHelper.sol';
+import './interfaces/INFT.sol';
 
 /**
  * @title SaleMultiLock is an over the counter peer to peer trading contract
@@ -125,24 +125,34 @@ contract SaleMultiLock is ReentrancyGuard {
     emit TokensBought(saleId, sale.amount);
     delete sales[_saleId];
     if (sale.unlockDates.length > 0) {
+      SafeERC20.safeIncreaseAllowance(IERC20(sale.token), futureContract, sale.amount);
       uint256 proRataLockAmount = sale.amount / sale.unlockDates.length;
       uint256 remainder = sale.amount % proRataLockAmount;
       uint256 amountCheck;
+      uint256 currentNFTBalance = IERC20(sale.token).balanceOf(futureContract);
       for (uint256 i; i < sale.unlockDates.length - 1; i++) {
-        NFTHelper.lockTokens(futureContract, beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
+        require(sale.unlockDates[i] > block.timestamp, 'NHL01');
+        INFT(futureContract).createNFT(beneficiary, proRataLockAmount, sale.token, sale.unlockDates[i]);
         emit FutureCreated(beneficiary, sale.token, proRataLockAmount, sale.unlockDates[i]);
         amountCheck += proRataLockAmount;
       }
       amountCheck += proRataLockAmount + remainder;
       require(amountCheck == sale.amount, 'amount total mismatch');
-      NFTHelper.lockTokens(
-        futureContract,
+      require(sale.unlockDates[sale.unlockDates.length - 1] > block.timestamp, 'NHL01');
+      INFT(futureContract).createNFT(
         beneficiary,
+        proRataLockAmount + remainder,
         sale.token,
-        proRataLockAmount + 1,
         sale.unlockDates[sale.unlockDates.length - 1]
       );
-      emit FutureCreated(beneficiary, sale.token, proRataLockAmount + 1, sale.unlockDates[sale.unlockDates.length - 1]);
+      uint256 postNFTBalance = IERC20(sale.token).balanceOf(futureContract);
+      require(postNFTBalance - currentNFTBalance == sale.amount, 'token deliver failure');
+      emit FutureCreated(
+        beneficiary,
+        sale.token,
+        proRataLockAmount + remainder,
+        sale.unlockDates[sale.unlockDates.length - 1]
+      );
     } else {
       TransferHelper.withdrawPayment(weth, sale.token, payable(beneficiary), sale.amount);
     }
