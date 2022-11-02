@@ -3,13 +3,13 @@ pragma solidity 0.8.7;
 
 import './interfaces/Decimals.sol';
 import './libraries/TransferHelper.sol';
-import './libraries/NFTHelper.sol';
+import './interfaces/INFT.sol';
 import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 import '@openzeppelin/contracts/security/ReentrancyGuard.sol';
 
 /**
- * @title BetaOTC
- * @notice BetaOTC is an over the counter peer to peer trading contract
+ * @title MultiLockOTC
+ * @notice MultiLockOTC is an over the counter peer to peer trading contract
  * @notice This contract allows for a seller to generate a unique public over the counter deal
  */
 contract MultiLockOTC is ReentrancyGuard {
@@ -18,13 +18,10 @@ contract MultiLockOTC is ReentrancyGuard {
   uint256 public dealId;
   address public futuresContract;
 
-  /// @notice Creates a BetaOTC instance
+  /// @notice Creates a MultiLockOTC instance
   /// @param _weth The address for the weth contract, weth is used to wrap and unwrap ETH sending to and from the smart contract
   /// @param _fc The address for the futures contract, used to generate the future NFT
-  constructor(
-    address payable _weth,
-    address _fc
-  ) {
+  constructor(address payable _weth, address _fc) {
     require(_weth != address(0));
     require(_fc != address(0));
     weth = _weth;
@@ -33,7 +30,7 @@ contract MultiLockOTC is ReentrancyGuard {
 
   /// Deal is the struct that defines a single OTC offer, created by a seller
   /// @param seller This is the creator and seller of the deal
-  /// @param token This is the token that the seller is selling! Must be a standard ERC20 token, parameter is the contract address of the ERC20, 
+  /// @param token This is the token that the seller is selling! Must be a standard ERC20 token, parameter is the contract address of the ERC20,
   /// the ERC20 contract is required to have a public call function decimals() that returns a uint. This is required to price the amount of tokens being purchase
   /// @param paymentCurrency This is also an ERC20 which the seller will get paid in during the act of a buyer buying tokens - also the ERC20 contract address
   /// @param remainingAmount This initially is the entire deposit the seller is selling, but as people purchase chunks of the deal, the remaining amount is decreased to 0
@@ -58,7 +55,7 @@ contract MultiLockOTC is ReentrancyGuard {
   /// Mapping of index to deal
   mapping(uint256 => Deal) public deals;
 
-  /// Method to allow this contract receive ETH 
+  /// Method to allow this contract receive ETH
   receive() external payable {}
 
   /// Event emitted when a deal is created
@@ -84,15 +81,15 @@ contract MultiLockOTC is ReentrancyGuard {
   /// Event emitted when the deal is closed
   /// @param _dealId The deal index
   event DealClosed(uint256 indexed _dealId);
-  
+
   /// Event emitted when a future NFT is created
   /// @param _owner The address that bought tokens from the deal and owns the future NFT
   /// @param _token The address of the token contract
   /// @param _amount The amount of tokens locked
   /// @param _unlockDate The date when the future NFT is unlocked
   event FutureCreated(address indexed _owner, address _token, uint256 _amount, uint256 _unlockDate);
-  
-  /// This function is what the seller uses to create a new OTC offering, Once this function has been completed 
+
+  /// This function is what the seller uses to create a new OTC offering, Once this function has been completed
   /// buyers can purchase tokens from the seller based on the price and parameters set
   /// @param _token is the ERC20 contract address that the seller is going to create the over the counter offering for
   /// @param _paymentCurrency is the ERC20 contract address of the opposite ERC20 that the seller wants to get paid in when selling the token (use WETH for ETH)
@@ -117,18 +114,8 @@ contract MultiLockOTC is ReentrancyGuard {
     require(_maturity > block.timestamp, 'OTC01');
     require(_amount >= _min, 'OTC02');
     require((_min * _price) / (10**Decimals(_token).decimals()) > 0, 'OTC03');
-    deals[dealId++] = Deal(
-      msg.sender,
-      _token,
-      _paymentCurrency,
-      _amount,
-      _min,
-      _price,
-      _maturity,
-      _unlockDates,
-      _nfts
-    );
-    
+    deals[dealId++] = Deal(msg.sender, _token, _paymentCurrency, _amount, _min, _price, _maturity, _unlockDates, _nfts);
+
     emit NewNFTGatedDeal(
       dealId - 1,
       msg.sender,
@@ -145,7 +132,7 @@ contract MultiLockOTC is ReentrancyGuard {
     TransferHelper.transferPayment(weth, _token, payable(msg.sender), payable(address(this)), _amount);
   }
 
-  /// @notice This function lets a seller cancel their existing deal anytime they if they want to, including before the maturity date, 
+  /// @notice This function lets a seller cancel their existing deal anytime they if they want to, including before the maturity date,
   /// all that is required is that the deal has not been closed, and that there is still a reamining balance
   /// @param _dealId is the dealID that is mapped to the Struct Deal
   function close(uint256 _dealId) external nonReentrant {
@@ -175,35 +162,67 @@ contract MultiLockOTC is ReentrancyGuard {
 
   /// This function is what buyers use to make purchases from the sellers
   /// @param _dealId is the index of the deal that a buyer wants to participate in and make a purchase
-  /// @param _amount is the amount of tokens the buyer is purchasing, which must be at least the minimumPurchase and at 
+  /// @param _amount is the amount of tokens the buyer is purchasing, which must be at least the minimumPurchase and at
+  /// @param _beneficiary is typically the msg.sender - but the buyer can denote a separate wallet to receive the NFTs or purchase in the case
+  /// that they want to send it to a cold storage or other wallet not doing the purchasing
   /// most the remainingAmount for this deal (or the remainingAmount if that is less than the minimum)
   /// @dev this function can also be used to execute a token SWAP function, where the swap is executed through this function
-  function buy(uint256 _dealId, uint256 _amount) external payable nonReentrant {
+  function buy(
+    uint256 _dealId,
+    uint256 _amount,
+    address _beneficiary
+  ) external payable nonReentrant {
     Deal memory deal = deals[_dealId];
     require(deal.maturity >= block.timestamp, 'OTC07');
     require(isNFTOwner(_dealId, msg.sender), 'OTC08');
+    require(_beneficiary != address(this));
     require(
       (_amount >= deal.minimumPurchase || _amount == deal.remainingAmount) && deal.remainingAmount >= _amount,
       'OTC09'
     );
+    address beneficiary = _beneficiary == address(0) ? msg.sender : _beneficiary;
     uint256 decimals = Decimals(deal.token).decimals();
     uint256 purchase = (_amount * deal.price) / (10**decimals);
     TransferHelper.transferPayment(weth, deal.paymentCurrency, msg.sender, payable(deal.seller), purchase);
     deal.remainingAmount -= _amount;
     emit TokensBought(_dealId, _amount, deal.remainingAmount);
-    if (deal.unlockDates.length > 0) {
-      uint256 proRataLockAmount = _amount / deal.unlockDates.length;
-      for (uint256 i; i < deal.unlockDates.length; i++) {
-        NFTHelper.lockTokens(futuresContract, msg.sender, deal.token, proRataLockAmount, deal.unlockDates[i]);
-        emit FutureCreated(msg.sender, deal.token, proRataLockAmount, deal.unlockDates[i]);
-      }
-    } else {
-      TransferHelper.withdrawPayment(weth, deal.token, payable(msg.sender), _amount);
-    }
     if (deal.remainingAmount == 0) {
       delete deals[_dealId];
     } else {
       deals[_dealId].remainingAmount = deal.remainingAmount;
     }
+    if (deal.unlockDates.length > 0) {
+      SafeERC20.safeIncreaseAllowance(IERC20(deal.token), futuresContract, _amount);
+      uint256 proRataLockAmount = _amount / deal.unlockDates.length;
+      uint256 remainder = _amount % proRataLockAmount;
+      uint256 amountCheck;
+      uint256 currentNFTBalance = IERC20(deal.token).balanceOf(futuresContract);
+      for (uint256 i; i < deal.unlockDates.length - 1; i++) {
+        require(deal.unlockDates[i] > block.timestamp, 'NHL01');
+        INFT(futuresContract).createNFT(beneficiary, proRataLockAmount, deal.token, deal.unlockDates[i]);
+        emit FutureCreated(beneficiary, deal.token, proRataLockAmount, deal.unlockDates[i]);
+        amountCheck += proRataLockAmount;
+      }
+      amountCheck += proRataLockAmount + remainder;
+      require(amountCheck == _amount, 'amount total mismatch');
+      require(deal.unlockDates[deal.unlockDates.length - 1] > block.timestamp, 'NHL01');
+      INFT(futuresContract).createNFT(
+        beneficiary,
+        proRataLockAmount + remainder,
+        deal.token,
+        deal.unlockDates[deal.unlockDates.length - 1]
+      );
+      uint256 postNFTBalance = IERC20(deal.token).balanceOf(futuresContract);
+      require(postNFTBalance - currentNFTBalance == _amount, 'token deliver failure');
+      emit FutureCreated(
+        beneficiary,
+        deal.token,
+        proRataLockAmount + remainder,
+        deal.unlockDates[deal.unlockDates.length - 1]
+      );
+    } else {
+      TransferHelper.withdrawPayment(weth, deal.token, payable(beneficiary), _amount);
+    }
+    
   }
 }
