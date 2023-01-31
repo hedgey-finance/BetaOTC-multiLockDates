@@ -62,8 +62,7 @@ contract MultiLockOTC is ReentrancyGuard {
     uint256 _price,
     uint256 _maturity,
     uint256[] _unlockDates,
-    address[] _nfts,
-    bool onlyBuyOnce
+    address[] _nfts
   );
 
   /// Event emitted when tokens are bought
