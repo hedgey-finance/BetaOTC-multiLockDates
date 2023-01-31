@@ -17,16 +17,8 @@ contract MultiLockOTC is ReentrancyGuard {
   address payable public weth;
   uint256 public dealId;
   address public futuresContract;
+  mapping(uint256 => mapping(address => bool)) private hasPurchased;
 
-  /// @notice Creates a MultiLockOTC instance
-  /// @param _weth The address for the weth contract, weth is used to wrap and unwrap ETH sending to and from the smart contract
-  /// @param _fc The address for the futures contract, used to generate the future NFT
-  constructor(address payable _weth, address _fc) {
-    require(_weth != address(0));
-    require(_fc != address(0));
-    weth = _weth;
-    futuresContract = _fc;
-  }
 
   /// Deal is the struct that defines a single OTC offer, created by a seller
   /// @param seller This is the creator and seller of the deal
@@ -50,6 +42,7 @@ contract MultiLockOTC is ReentrancyGuard {
     uint256 maturity;
     uint256[] unlockDates;
     address[] nfts;
+    bool onlyBuyOnce;
   }
 
   /// Mapping of index to deal
@@ -69,7 +62,8 @@ contract MultiLockOTC is ReentrancyGuard {
     uint256 _price,
     uint256 _maturity,
     uint256[] _unlockDates,
-    address[] _nfts
+    address[] _nfts,
+    bool onlyBuyOnce
   );
 
   /// Event emitted when tokens are bought
@@ -88,6 +82,17 @@ contract MultiLockOTC is ReentrancyGuard {
   /// @param _amount The amount of tokens locked
   /// @param _unlockDate The date when the future NFT is unlocked
   event FutureCreated(address indexed _owner, address _token, uint256 _amount, uint256 _unlockDate);
+  
+  
+  /// @notice Creates a MultiLockOTC instance
+  /// @param _weth The address for the weth contract, weth is used to wrap and unwrap ETH sending to and from the smart contract
+  /// @param _fc The address for the futures contract, used to generate the future NFT
+  constructor(address payable _weth, address _fc) {
+    require(_weth != address(0));
+    require(_fc != address(0));
+    weth = _weth;
+    futuresContract = _fc;
+  }
 
   /// This function is what the seller uses to create a new OTC offering, Once this function has been completed
   /// buyers can purchase tokens from the seller based on the price and parameters set
@@ -109,12 +114,13 @@ contract MultiLockOTC is ReentrancyGuard {
     uint256 _price,
     uint256 _maturity,
     uint256[] memory _unlockDates,
-    address[] memory _nfts
+    address[] memory _nfts,
+    bool _onlyBuyOnce
   ) external payable nonReentrant {
     require(_maturity > block.timestamp, 'OTC01');
     require(_amount >= _min, 'OTC02');
     require((_min * _price) / (10**Decimals(_token).decimals()) > 0, 'OTC03');
-    deals[dealId++] = Deal(msg.sender, _token, _paymentCurrency, _amount, _min, _price, _maturity, _unlockDates, _nfts);
+    deals[dealId++] = Deal(msg.sender, _token, _paymentCurrency, _amount, _min, _price, _maturity, _unlockDates, _nfts, _onlyBuyOnce);
 
     emit NewNFTGatedDeal(
       dealId - 1,
@@ -126,7 +132,8 @@ contract MultiLockOTC is ReentrancyGuard {
       _price,
       _maturity,
       _unlockDates,
-      _nfts
+      _nfts,
+      _onlyBuyOnce
     );
 
     TransferHelper.transferPayment(weth, _token, payable(msg.sender), payable(address(this)), _amount);
@@ -147,14 +154,15 @@ contract MultiLockOTC is ReentrancyGuard {
   /// @notice Checks if the address owns one of the NFTs configured for the deal
   /// @param _dealId The deal index
   /// @param buyer The buyer address
-  function isNFTOwner(uint256 _dealId, address buyer) public view returns (bool canBuy) {
+  function canBuy(uint256 _dealId, address buyer) public view returns (bool _canBuy) {
     Deal memory deal = deals[_dealId];
-    if (deal.nfts.length == 0) {
-      canBuy = true;
+    if (deal.nfts.length == 0 && !deal.onlyBuyOnce) {
+      _canBuy = true;
     } else {
+      require(!hasPurchased[_dealId][buyer], 'already purchased');
       for (uint256 i; i < deal.nfts.length; i++) {
         if (IERC721(deal.nfts[i]).balanceOf(buyer) > 0) {
-          canBuy = true;
+          _canBuy = true;
         }
       }
     }
@@ -174,7 +182,7 @@ contract MultiLockOTC is ReentrancyGuard {
   ) external payable nonReentrant {
     Deal memory deal = deals[_dealId];
     require(deal.maturity >= block.timestamp, 'OTC07');
-    require(isNFTOwner(_dealId, msg.sender), 'OTC08');
+    require(canBuy(_dealId, msg.sender), 'OTC08');
     require(_beneficiary != address(this));
     require(
       (_amount >= deal.minimumPurchase || _amount == deal.remainingAmount) && deal.remainingAmount >= _amount,
