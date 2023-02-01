@@ -17,8 +17,7 @@ contract MultiLockOTC is ReentrancyGuard {
   address payable public weth;
   uint256 public dealId;
   address public futuresContract;
-  mapping(uint256 => mapping(address => bool)) private hasPurchased;
-
+  mapping(uint256 => mapping(address => bool)) public hasPurchased;
 
   /// Deal is the struct that defines a single OTC offer, created by a seller
   /// @param seller This is the creator and seller of the deal
@@ -31,7 +30,7 @@ contract MultiLockOTC is ReentrancyGuard {
   /// the total price is calculated by the remainingAmount * price (then adjusting for the decimals of the payment currency)
   /// @param maturity This is the unix time defining the period in which the deal is valid. After the maturity no purchases can be made
   /// @param _unlockDates these are the dates in which tokens will be locked, multiple dates can be passed in for a series of vesting cliffs
-  /// @param _nfts is a special option to make this deal require that the buyers hold a specific other NFT to participate in the buy
+  /// @param _nft is a special option to make this deal require that the buyers hold a specific other NFT to participate in the buy
   struct Deal {
     address seller;
     address token;
@@ -41,7 +40,7 @@ contract MultiLockOTC is ReentrancyGuard {
     uint256 price;
     uint256 maturity;
     uint256[] unlockDates;
-    address[] nfts;
+    address nft;
     bool onlyBuyOnce;
   }
 
@@ -62,7 +61,7 @@ contract MultiLockOTC is ReentrancyGuard {
     uint256 _price,
     uint256 _maturity,
     uint256[] _unlockDates,
-    address[] _nfts
+    address _nft
   );
 
   /// Event emitted when tokens are bought
@@ -81,8 +80,7 @@ contract MultiLockOTC is ReentrancyGuard {
   /// @param _amount The amount of tokens locked
   /// @param _unlockDate The date when the future NFT is unlocked
   event FutureCreated(address indexed _owner, address _token, uint256 _amount, uint256 _unlockDate);
-  
-  
+
   /// @notice Creates a MultiLockOTC instance
   /// @param _weth The address for the weth contract, weth is used to wrap and unwrap ETH sending to and from the smart contract
   /// @param _fc The address for the futures contract, used to generate the future NFT
@@ -104,7 +102,7 @@ contract MultiLockOTC is ReentrancyGuard {
   /// if this is a token SWAP, then the _price needs to be set as the ratio of the tokens being swapped - ie 10 for 10 paymentCurrency tokens to 1 token
   /// @param _maturity is how long you would like to allow buyers to purchase tokens from this deal, in unix time. this needs to be beyond current block time
   /// @param _unlockDates is the dates in which the tokens will be cliff vested
-  /// @param _nfts is a special option to make this deal require that the buyers hold a specific other NFT to participate in the buy
+  /// @param _nft is a special option to make this deal require that the buyers hold a specific other NFT to participate in the buy
   function createNFTGatedDeal(
     address _token,
     address _paymentCurrency,
@@ -113,13 +111,24 @@ contract MultiLockOTC is ReentrancyGuard {
     uint256 _price,
     uint256 _maturity,
     uint256[] memory _unlockDates,
-    address[] memory _nfts,
+    address _nft,
     bool _onlyBuyOnce
   ) external payable nonReentrant {
     require(_maturity > block.timestamp, 'OTC01');
     require(_amount >= _min, 'OTC02');
     require((_min * _price) / (10**Decimals(_token).decimals()) > 0, 'OTC03');
-    deals[dealId++] = Deal(msg.sender, _token, _paymentCurrency, _amount, _min, _price, _maturity, _unlockDates, _nfts, _onlyBuyOnce);
+    deals[dealId++] = Deal(
+      msg.sender,
+      _token,
+      _paymentCurrency,
+      _amount,
+      _min,
+      _price,
+      _maturity,
+      _unlockDates,
+      _nft,
+      _onlyBuyOnce
+    );
 
     emit NewNFTGatedDeal(
       dealId - 1,
@@ -131,7 +140,7 @@ contract MultiLockOTC is ReentrancyGuard {
       _price,
       _maturity,
       _unlockDates,
-      _nfts
+      _nft
     );
 
     TransferHelper.transferPayment(weth, _token, payable(msg.sender), payable(address(this)), _amount);
@@ -154,16 +163,8 @@ contract MultiLockOTC is ReentrancyGuard {
   /// @param buyer The buyer address
   function canBuy(uint256 _dealId, address buyer) public view returns (bool _canBuy) {
     Deal memory deal = deals[_dealId];
-    if (deal.nfts.length == 0 && !deal.onlyBuyOnce) {
+    if (!hasPurchased[_dealId][buyer] && (IERC721(deal.nft).balanceOf(buyer) > 0 || deal.nft == address(0)))
       _canBuy = true;
-    } else {
-      require(!hasPurchased[_dealId][buyer], 'already purchased');
-      for (uint256 i; i < deal.nfts.length; i++) {
-        if (IERC721(deal.nfts[i]).balanceOf(buyer) > 0) {
-          _canBuy = true;
-        }
-      }
-    }
   }
 
   /// This function is what buyers use to make purchases from the sellers
@@ -230,6 +231,5 @@ contract MultiLockOTC is ReentrancyGuard {
     } else {
       TransferHelper.withdrawPayment(weth, deal.token, payable(beneficiary), _amount);
     }
-    
   }
 }
