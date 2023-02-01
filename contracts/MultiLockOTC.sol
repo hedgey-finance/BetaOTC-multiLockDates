@@ -187,6 +187,7 @@ contract MultiLockOTC is ReentrancyGuard {
       (_amount >= deal.minimumPurchase || _amount == deal.remainingAmount) && deal.remainingAmount >= _amount,
       'OTC09'
     );
+    if (deal.onlyBuyOnce) hasPurchased[_dealId][msg.sender] = true;
     address beneficiary = _beneficiary == address(0) ? msg.sender : _beneficiary;
     uint256 decimals = Decimals(deal.token).decimals();
     uint256 purchase = (_amount * deal.price) / (10**decimals);
