@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.7;
+pragma solidity 0.8.17;
 
 import './interfaces/Decimals.sol';
 import './libraries/TransferHelper.sol';
@@ -131,8 +131,7 @@ contract MultiLockOTC is ReentrancyGuard {
       _price,
       _maturity,
       _unlockDates,
-      _nfts,
-      _onlyBuyOnce
+      _nfts
     );
 
     TransferHelper.transferPayment(weth, _token, payable(msg.sender), payable(address(this)), _amount);
