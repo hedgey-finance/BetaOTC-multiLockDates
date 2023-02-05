@@ -61,7 +61,8 @@ contract MultiLockOTC is ReentrancyGuard {
     uint256 _price,
     uint256 _maturity,
     uint256[] _unlockDates,
-    address _nft
+    address _nft,
+    bool _onlyBuyOnce
   );
 
   /// Event emitted when tokens are bought
@@ -140,7 +141,8 @@ contract MultiLockOTC is ReentrancyGuard {
       _price,
       _maturity,
       _unlockDates,
-      _nft
+      _nft,
+      _onlyBuyOnce
     );
 
     TransferHelper.transferPayment(weth, _token, payable(msg.sender), payable(address(this)), _amount);
