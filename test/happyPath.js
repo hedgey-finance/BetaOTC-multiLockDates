@@ -62,7 +62,8 @@ module.exports = () => {
         price,
         maturity,
         unlockDates,
-        wlToken.address
+        wlToken.address,
+        onlyBuyOnce
       );
     expect(await token.balanceOf(otc.address)).to.eq(amount);
   });
@@ -87,5 +88,19 @@ module.exports = () => {
       .withArgs(buyer.address, token.address, buyAmt, unlockDates[0]);
     expect(await usdc.balanceOf(seller.address)).to.eq(buyAmt.mul(price).div(C.E18_1));
     expect(await otc.canBuy('0', buyer.address)).to.eq(false);
+  });
+  it('Seller makes a second deal without a nft gate', async () => {
+    await otc.createNFTGatedDeal(
+      token.address,
+      usdc.address,
+      amount,
+      min,
+      price,
+      maturity,
+      unlockDates,
+      C.ZERO_ADDRESS,
+      onlyBuyOnce
+    );
+    expect(await otc.canBuy('1', buyer.address)).to.eq(true);
   });
 };

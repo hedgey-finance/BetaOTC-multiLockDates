@@ -165,8 +165,13 @@ contract MultiLockOTC is ReentrancyGuard {
   /// @param buyer The buyer address
   function canBuy(uint256 _dealId, address buyer) public view returns (bool _canBuy) {
     Deal memory deal = deals[_dealId];
-    if (!hasPurchased[_dealId][buyer] && (IERC721(deal.nft).balanceOf(buyer) > 0 || deal.nft == address(0)))
-      _canBuy = true;
+    if (!hasPurchased[_dealId][buyer]) {
+      if (deal.nft == address(0x0)) {
+        _canBuy = true;
+      } else if (IERC721(deal.nft).balanceOf(buyer) > 0) {
+        _canBuy = true;
+      }
+    }
   }
 
   /// This function is what buyers use to make purchases from the sellers
