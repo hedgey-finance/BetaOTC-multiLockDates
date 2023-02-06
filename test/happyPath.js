@@ -102,5 +102,7 @@ module.exports = () => {
       onlyBuyOnce
     );
     expect(await otc.canBuy('1', buyer.address)).to.eq(true);
+    await otc.connect(buyer).buy('1', C.E18_10, buyer.address);
+    expect(await otc.canBuy('1', buyer.address)).to.eq(false);
   });
 };
