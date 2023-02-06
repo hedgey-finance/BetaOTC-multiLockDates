@@ -1,5 +1,6 @@
 const { expect } = require('chai');
 const { time } = require('@nomicfoundation/hardhat-network-helpers');
+const { etheres, ethers } = require('hardhat');
 const C = require('./constants');
 const { deployOTC } = require('./fixtures');
 
@@ -90,9 +91,10 @@ module.exports = () => {
     expect(await otc.canBuy('0', buyer.address)).to.eq(false);
   });
   it('Seller makes a second deal without a nft gate', async () => {
+    price = C.E18_05;
     await otc.createNFTGatedDeal(
       token.address,
-      usdc.address,
+      weth.address,
       amount,
       min,
       price,
@@ -102,7 +104,38 @@ module.exports = () => {
       onlyBuyOnce
     );
     expect(await otc.canBuy('1', buyer.address)).to.eq(true);
-    await otc.connect(buyer).buy('1', C.E18_10, buyer.address);
+  });
+  it('buys the deal with ETH', async () => {
+    let buyAmt = C.E18_10;
+    let dealId = '1';
+    let sellerBal = await ethers.provider.getBalance(seller.address);
+    console.log(`seller pre balance: ${sellerBal / 10 ** 18}`);
+    let purchase = buyAmt.mul(price).div(C.E18_1);
+    console.log(`purchase: ${purchase / 10 ** 18}`);
+    remainder = C.E18_100.sub(buyAmt);
+    expect(await otc.connect(buyer).buy(dealId, buyAmt, buyer.address, { value: purchase }))
+      .to.emit('TokensBought')
+      .withArgs(dealId, buyAmt, remainder)
+      .to.emit('FutureCreated')
+      .withArgs(buyer.address, token.address, buyAmt, unlockDates[0]);
     expect(await otc.canBuy('1', buyer.address)).to.eq(false);
+    let sellerNewBal = await ethers.provider.getBalance(seller.address);
+    console.log(`new seller balance: ${sellerNewBal / 10 ** 18}`);
+  });
+  it('creates a deal wtih ETH', async () => {
+    expect(await weth.balanceOf(otc.address)).to.eq('0');
+    await otc.createNFTGatedDeal(
+      weth.address,
+      usdc.address,
+      amount,
+      min,
+      price,
+      maturity,
+      unlockDates,
+      C.ZERO_ADDRESS,
+      onlyBuyOnce,
+      { value: amount }
+    );
+    expect(await weth.balanceOf(otc.address)).to.eq(amount);
   });
 };
